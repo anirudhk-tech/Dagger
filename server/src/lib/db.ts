@@ -256,3 +256,80 @@ export async function getRunsForPipeline(pipelineId: string): Promise<DbRun[]> {
   if (error) throw new Error(`Failed to get runs: ${error.message}`);
   return data || [];
 }
+
+// ============================================
+// Artifact Operations
+// ============================================
+
+export interface DbArtifact {
+  id: string;
+  run_id: string | null;
+  kind: "output" | "export" | "log" | "other";
+  storage_path: string | null;
+  content_type: string | null;
+  size_bytes: number | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export async function createArtifact(artifact: {
+  run_id: string;
+  kind: "output" | "export" | "log" | "other";
+  storage_path: string;
+  content_type?: string;
+  size_bytes?: number;
+  expires_at?: string;
+}): Promise<DbArtifact> {
+  const { data, error } = await getSupabase()
+    .from("artifacts")
+    .insert(artifact)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to create artifact: ${error.message}`);
+  return data;
+}
+
+export async function getArtifact(id: string): Promise<DbArtifact | null> {
+  const { data, error } = await getSupabase()
+    .from("artifacts")
+    .select()
+    .eq("id", id)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    throw new Error(`Failed to get artifact: ${error.message}`);
+  }
+  return data;
+}
+
+export async function getExpiredArtifacts(): Promise<DbArtifact[]> {
+  const { data, error } = await getSupabase()
+    .from("artifacts")
+    .select()
+    .lt("expires_at", new Date().toISOString())
+    .not("storage_path", "is", null);
+
+  if (error) throw new Error(`Failed to get expired artifacts: ${error.message}`);
+  return data || [];
+}
+
+export async function deleteArtifact(id: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("artifacts")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(`Failed to delete artifact: ${error.message}`);
+}
+
+export async function deleteExpiredArtifacts(): Promise<number> {
+  const { data, error } = await getSupabase()
+    .from("artifacts")
+    .delete()
+    .lt("expires_at", new Date().toISOString())
+    .select("id");
+
+  if (error) throw new Error(`Failed to delete expired artifacts: ${error.message}`);
+  return data?.length || 0;
+}

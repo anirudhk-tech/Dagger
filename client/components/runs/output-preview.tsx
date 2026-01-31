@@ -1,9 +1,11 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { useState } from "react";
+import { Download, Loader2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataPreview } from "@/components/shared/data-preview";
+import { getDownloadUrl } from "@/lib/api";
 import type { ParsedCSV } from "@/lib/types";
 
 interface OutputPreviewProps {
@@ -15,7 +17,7 @@ function parseCSVFromBase64(base64: string): ParsedCSV {
   try {
     const csvContent = atob(base64);
     const lines = csvContent.trim().split(/\r?\n/);
-    
+
     if (lines.length === 0) {
       return { headers: [], rows: [] };
     }
@@ -71,19 +73,61 @@ function parseCSVLine(line: string): string[] {
 }
 
 export function OutputPreview({ runId, outputBase64 }: OutputPreviewProps) {
-  const data = outputBase64 
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [expiryInfo, setExpiryInfo] = useState<string | null>(null);
+
+  const data = outputBase64
     ? parseCSVFromBase64(outputBase64)
     : { headers: [], rows: [] };
 
   const hasData = data.headers.length > 0;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!hasData) return;
 
-    // Create CSV content
+    setIsDownloading(true);
+    setDownloadError(null);
+    setExpiryInfo(null);
+
+    try {
+      // Get temporary download URL from backend
+      const response = await getDownloadUrl(runId);
+
+      // Show expiry info
+      const expiresAt = new Date(response.expires_at);
+      const minutesRemaining = Math.ceil((expiresAt.getTime() - Date.now()) / 60000);
+      setExpiryInfo(`Link expires in ${minutesRemaining} minutes`);
+
+      // Open the download URL in a new tab/trigger download
+      const link = document.createElement("a");
+      link.href = response.download_url;
+      link.download = response.filename;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clear expiry info after a few seconds
+      setTimeout(() => setExpiryInfo(null), 5000);
+    } catch (err) {
+      console.error("Download failed:", err);
+      setDownloadError(err instanceof Error ? err.message : "Download failed");
+
+      // Fallback to local download if server fails
+      fallbackDownload();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const fallbackDownload = () => {
+    if (!hasData) return;
+
+    // Create CSV content locally
     const csvContent = [
       data.headers.join(","),
-      ...data.rows.map((row) => row.join(",")),
+      ...data.rows.map((row) => row.map(escapeCSVField).join(",")),
     ].join("\n");
 
     // Create download link
@@ -91,7 +135,7 @@ export function OutputPreview({ runId, outputBase64 }: OutputPreviewProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `output-${runId}.csv`;
+    a.download = `output-${runId.slice(0, 8)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -116,13 +160,36 @@ export function OutputPreview({ runId, outputBase64 }: OutputPreviewProps) {
           <div>
             <CardTitle>Output Preview</CardTitle>
             <CardDescription>
-              First {Math.min(data.rows.length, 10)} rows of the output data
+              First {Math.min(data.rows.length, 10)} of {data.rows.length} rows
             </CardDescription>
           </div>
-          <Button onClick={handleDownload}>
-            <Download className="mr-2 h-4 w-4" />
-            Download CSV
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button onClick={handleDownload} disabled={isDownloading}>
+              {isDownloading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Preparing...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </>
+              )}
+            </Button>
+            {expiryInfo && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {expiryInfo}
+              </span>
+            )}
+            {downloadError && (
+              <span className="flex items-center gap-1 text-xs text-destructive">
+                <AlertCircle className="h-3 w-3" />
+                {downloadError}
+              </span>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -130,4 +197,11 @@ export function OutputPreview({ runId, outputBase64 }: OutputPreviewProps) {
       </CardContent>
     </Card>
   );
+}
+
+function escapeCSVField(field: string): string {
+  if (field.includes(",") || field.includes('"') || field.includes("\n")) {
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+  return field;
 }

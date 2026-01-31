@@ -3,18 +3,21 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
-    "start": "bun run src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev:bun": "bun run --watch src/index.ts",
+    "start:bun": "bun run src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.0.2",
-    "@supabase/supabase-js": "^2.39.0",
+    "@supabase/supabase-js": "^2.93.3",
     "elysia": "^1.0.12",
     "openai": "^4.24.0"
   },
   "devDependencies": {
     "@types/bun": "^1.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.0"
   }
 }

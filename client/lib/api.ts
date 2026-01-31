@@ -253,3 +253,30 @@ export async function exportDocker(pipelineVersionId: string): Promise<{ downloa
     }),
   });
 }
+
+// ============================================
+// Download API
+// ============================================
+
+interface DownloadResponse {
+  download_url: string;
+  expires_at: string;
+  filename: string;
+}
+
+/**
+ * Get a temporary download URL for run output.
+ * The URL expires after 3 minutes.
+ */
+export async function getDownloadUrl(runId: string): Promise<DownloadResponse> {
+  return fetchAPI<DownloadResponse>(`/runs/${runId}/download`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Check if download is available for a run
+ */
+export async function checkDownloadStatus(runId: string): Promise<{ available: boolean; reason?: string }> {
+  return fetchAPI<{ available: boolean; reason?: string }>(`/download/status/${runId}`);
+}

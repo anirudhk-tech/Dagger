@@ -1,1 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
 
+# Build outputs
+dist/
+build/
+build-wasm/
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Lock files (optional - uncomment if you want to ignore)
+# package-lock.json
+# pnpm-lock.yaml
+# bun.lock
+
+# C++ build artifacts
+*.o
+*.obj
+*.exe
+*.wasm
+*.js.map
+engine/build/
+engine/build-wasm/
+
+# Large third-party files (download during build)
+# engine/third_party/json.hpp
+
+# Claude Code
+.claude/
