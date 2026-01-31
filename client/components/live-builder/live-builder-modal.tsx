@@ -1,20 +1,21 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useCallback } from "react";
-import { X, CheckCircle, ArrowRight } from "lucide-react";
+import { useEffect, useReducer, useRef, useCallback, useState } from "react";
+import { X, CheckCircle, XCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AgentStepper } from "./agent-stepper";
 import { PipelineCanvas } from "./pipeline-canvas";
 import { ValidationFeed } from "./validation-feed";
 import { IterationProgress } from "./iteration-progress";
-import { simulatePipelineBuild, getInitialLiveBuilderState } from "@/lib/mock-streaming";
-import type { LiveBuilderState, LiveBuilderEvent, PipelineSpec } from "@/lib/types";
+import { createAndRunPipeline } from "@/lib/api";
+import type { LiveBuilderState, LiveBuilderEvent, PipelineSpec, AgentPhase, CreatePipelineResponse } from "@/lib/types";
 
 interface LiveBuilderModalProps {
   isOpen: boolean;
   prompt: string;
-  onComplete: (state: LiveBuilderState) => void;
+  csvBase64: string;
+  onComplete: (result: { runId: string; pipelineId: string; response: CreatePipelineResponse }) => void;
   onCancel: () => void;
 }
 
@@ -32,7 +33,6 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         ...action.payload,
-        // Track previous spec for diff highlighting
         previousSpec: action.payload.currentSpec !== undefined 
           ? state.currentSpec 
           : state.previousSpec,
@@ -44,46 +44,150 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+function getInitialState(runId: string): State {
+  return {
+    runId,
+    phase: "analyzing" as AgentPhase,
+    currentIteration: 0,
+    maxIterations: 3,
+    currentSpec: null,
+    validationErrors: [],
+    isComplete: false,
+    finalStatus: null,
+    previousSpec: null,
+  };
+}
+
 export function LiveBuilderModal({
   isOpen,
   prompt,
+  csvBase64,
   onComplete,
   onCancel,
 }: LiveBuilderModalProps) {
-  const runId = useRef(`run_${Date.now()}`);
-  const cancelRef = useRef<(() => void) | null>(null);
+  const [state, dispatch] = useReducer(reducer, getInitialState("pending"));
+  const [apiResponse, setApiResponse] = useState<CreatePipelineResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const hasStartedRef = useRef(false);
 
-  const [state, dispatch] = useReducer(reducer, {
-    ...getInitialLiveBuilderState(runId.current),
-    previousSpec: null,
-  });
+  // Simulate phase progression while API call is in progress
+  const simulatePhases = useCallback(() => {
+    const phases: { phase: AgentPhase; delay: number }[] = [
+      { phase: "analyzing", delay: 0 },
+      { phase: "generating", delay: 1500 },
+      { phase: "validating", delay: 4000 },
+      { phase: "executing", delay: 6000 },
+      { phase: "evaluating", delay: 8000 },
+    ];
 
-  const handleEvent = useCallback((event: LiveBuilderEvent) => {
-    dispatch({ type: "UPDATE", payload: event.payload });
+    const timeouts: NodeJS.Timeout[] = [];
+
+    phases.forEach(({ phase, delay }) => {
+      const timeout = setTimeout(() => {
+        dispatch({ type: "UPDATE", payload: { phase } });
+      }, delay);
+      timeouts.push(timeout);
+    });
+
+    return () => timeouts.forEach(clearTimeout);
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      // Start the simulation
-      cancelRef.current = simulatePipelineBuild(handleEvent);
-    }
+    if (!isOpen || hasStartedRef.current) return;
+    hasStartedRef.current = true;
 
-    return () => {
-      if (cancelRef.current) {
-        cancelRef.current();
+    const runPipeline = async () => {
+      abortControllerRef.current = new AbortController();
+      
+      // Start phase simulation
+      const cleanupPhases = simulatePhases();
+
+      try {
+        // Call the real API
+        const response = await createAndRunPipeline({
+          prompt,
+          data: {
+            format: "csv",
+            content_base64: csvBase64,
+          },
+          options: {
+            max_fix_iters: 3,
+          },
+        });
+
+        setApiResponse(response);
+
+        // Update state with real data
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            runId: response.run_id,
+            currentSpec: response.report.pipeline_spec,
+            currentIteration: response.report.fix_iterations,
+            phase: "complete",
+            isComplete: true,
+            finalStatus: "success",
+            validationErrors: response.report.validation_errors.length > 0
+              ? [{
+                  iteration: response.report.fix_iterations,
+                  errors: response.report.validation_errors,
+                  timestamp: new Date().toISOString(),
+                  fixed: true,
+                }]
+              : [],
+          },
+        });
+      } catch (err) {
+        console.error("Pipeline creation failed:", err);
+        setError(err instanceof Error ? err.message : "Pipeline creation failed");
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            phase: "failed",
+            isComplete: true,
+            finalStatus: "failed",
+          },
+        });
+      } finally {
+        cleanupPhases();
       }
     };
-  }, [isOpen, handleEvent]);
+
+    runPipeline();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [isOpen, prompt, csvBase64, simulatePhases]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      hasStartedRef.current = false;
+      setApiResponse(null);
+      setError(null);
+      dispatch({ type: "UPDATE", payload: getInitialState("pending") });
+    }
+  }, [isOpen]);
 
   const handleCancel = () => {
-    if (cancelRef.current) {
-      cancelRef.current();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
     onCancel();
   };
 
   const handleViewResults = () => {
-    onComplete(state);
+    if (apiResponse) {
+      onComplete({
+        runId: apiResponse.run_id,
+        pipelineId: apiResponse.pipeline_id,
+        response: apiResponse,
+      });
+    }
   };
 
   const isComplete = state.phase === "complete" || state.phase === "failed";
@@ -101,7 +205,10 @@ export function LiveBuilderModal({
                     Pipeline Built Successfully
                   </span>
                 ) : (
-                  "Pipeline Build Failed"
+                  <span className="flex items-center gap-3">
+                    <XCircle className="h-6 w-6 text-destructive" />
+                    Pipeline Build Failed
+                  </span>
                 )
               ) : (
                 "Building Pipeline..."
@@ -123,6 +230,13 @@ export function LiveBuilderModal({
               <span className="text-muted-foreground">{prompt}</span>
             </p>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
 
           {/* Progress Bar */}
           <IterationProgress
@@ -160,7 +274,7 @@ export function LiveBuilderModal({
                 Close
               </Button>
             )}
-            {state.finalStatus === "success" && (
+            {state.finalStatus === "success" && apiResponse && (
               <Button size="lg" onClick={handleViewResults}>
                 View Results
                 <ArrowRight className="ml-2 h-4 w-4" />

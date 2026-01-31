@@ -10,7 +10,7 @@ import { validatePipeline, runPipeline } from "../../engine_wasm/bindings";
 import { computeMetrics, evaluateRun } from "../lib/eval";
 import type { RerunPipelineRequest, RerunPipelineResponse } from "../lib/types";
 
-const MAX_INPUT_BYTES = parseInt(process.env.MAX_INPUT_BYTES || "1000000", 10);
+const MAX_INPUT_BYTES = parseInt(process.env.MAX_INPUT_BYTES || "10000000", 10); // 10MB default
 
 export const pipelineRunRoutes = new Elysia()
   // POST /pipelines/:id/run - Re-run a saved version on new data

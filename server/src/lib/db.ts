@@ -65,6 +65,21 @@ export async function getPipeline(id: string): Promise<DbPipeline | null> {
   return data;
 }
 
+export async function updatePipeline(
+  id: string,
+  updates: { name?: string; description?: string }
+): Promise<DbPipeline> {
+  const { data, error } = await getSupabase()
+    .from("pipelines")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to update pipeline: ${error.message}`);
+  return data;
+}
+
 export async function listPipelines(): Promise<
   Array<{
     id: string;

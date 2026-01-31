@@ -20,6 +20,12 @@ export default function PipelinesPage() {
     });
   }, []);
 
+  const handlePipelineUpdate = (updated: Pipeline) => {
+    setPipelines((prev) =>
+      prev.map((p) => (p.id === updated.id ? updated : p))
+    );
+  };
+
   return (
     <div className="container py-8">
       <div className="mb-8 flex items-center justify-between">
@@ -63,7 +69,11 @@ export default function PipelinesPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {pipelines.map((pipeline) => (
-            <PipelineCard key={pipeline.id} pipeline={pipeline} />
+            <PipelineCard 
+              key={pipeline.id} 
+              pipeline={pipeline} 
+              onUpdate={handlePipelineUpdate}
+            />
           ))}
         </div>
       )}

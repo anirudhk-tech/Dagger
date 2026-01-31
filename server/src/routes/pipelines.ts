@@ -4,6 +4,7 @@ import {
   getPipeline,
   getPipelineVersions,
   getRunsForPipeline,
+  updatePipeline,
 } from "../lib/db";
 import type { PipelineListItem, PipelineDetailResponse } from "../lib/types";
 
@@ -79,4 +80,26 @@ export const pipelinesRoutes = new Elysia()
       created_at: r.created_at,
       finished_at: r.finished_at,
     }));
+  })
+
+  // PATCH /pipelines/:id - Update pipeline name/description
+  .patch("/pipelines/:id", async ({ params, body }) => {
+    const { id } = params;
+    const { name, description } = body as { name?: string; description?: string };
+
+    const pipeline = await getPipeline(id);
+    if (!pipeline) {
+      throw new Error(`Pipeline not found: ${id}`);
+    }
+
+    const updates: { name?: string; description?: string } = {};
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+
+    if (Object.keys(updates).length === 0) {
+      return { success: true, pipeline };
+    }
+
+    const updated = await updatePipeline(id, updates);
+    return { success: true, pipeline: updated };
   });

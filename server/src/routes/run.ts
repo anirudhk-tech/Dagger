@@ -13,7 +13,7 @@ import { validatePipeline, runPipeline } from "../../engine_wasm/bindings";
 import { computeMetrics, evaluateRun } from "../lib/eval";
 import type { CreatePipelineRequest, CreatePipelineResponse, PipelineSpec } from "../lib/types";
 
-const MAX_INPUT_BYTES = parseInt(process.env.MAX_INPUT_BYTES || "1000000", 10);
+const MAX_INPUT_BYTES = parseInt(process.env.MAX_INPUT_BYTES || "10000000", 10); // 10MB default
 const MAX_FIX_ITERS_DEFAULT = parseInt(process.env.MAX_FIX_ITERS_DEFAULT || "3", 10);
 
 export const runRoutes = new Elysia().post(

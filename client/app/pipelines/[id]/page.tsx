@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Download, ChevronRight, Code } from "lucide-react";
+import { ArrowLeft, Play, Download, ChevronRight, Code, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -17,7 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { VersionList } from "@/components/pipelines/version-list";
-import { getPipeline } from "@/lib/api";
+import { RerunModal } from "@/components/pipelines/rerun-modal";
+import { getPipeline, updatePipeline } from "@/lib/api";
 import { formatDate, formatDistanceToNow } from "@/lib/date-utils";
 import type { Pipeline, PipelineVersion, Run } from "@/lib/types";
 
@@ -31,6 +34,13 @@ export default function PipelineDetailPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
   const [showSpec, setShowSpec] = useState(false);
+  const [showRerunModal, setShowRerunModal] = useState(false);
+  
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     getPipeline(pipelineId).then((data) => {
@@ -45,6 +55,42 @@ export default function PipelineDetailPage() {
       setLoading(false);
     });
   }, [pipelineId]);
+
+  const startEditing = () => {
+    if (pipeline) {
+      setEditName(pipeline.name);
+      setEditDescription(pipeline.description);
+      setIsEditing(true);
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditName("");
+    setEditDescription("");
+  };
+
+  const saveChanges = async () => {
+    if (!pipeline || !editName.trim()) return;
+    
+    setIsSaving(true);
+    try {
+      await updatePipeline(pipelineId, {
+        name: editName.trim(),
+        description: editDescription.trim(),
+      });
+      setPipeline({
+        ...pipeline,
+        name: editName.trim(),
+        description: editDescription.trim(),
+      });
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Failed to update pipeline:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const selectedVersion = versions.find((v) => v.id === selectedVersionId);
 
@@ -79,12 +125,60 @@ export default function PipelineDetailPage() {
         </Button>
         
         <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{pipeline.name}</h1>
-            <p className="text-muted-foreground">{pipeline.description}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Created {formatDate(pipeline.created_at)}
-            </p>
+          <div className="flex-1 pr-4">
+            {isEditing ? (
+              <div className="space-y-3">
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Pipeline name"
+                  className="text-2xl font-bold h-auto py-1"
+                />
+                <Textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Description (optional)"
+                  className="min-h-[60px] resize-none"
+                />
+                <div className="flex items-center gap-2">
+                  <Button 
+                    size="sm" 
+                    onClick={saveChanges}
+                    disabled={!editName.trim() || isSaving}
+                  >
+                    <Check className="mr-1 h-4 w-4" />
+                    {isSaving ? "Saving..." : "Save"}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={cancelEditing}
+                    disabled={isSaving}
+                  >
+                    <X className="mr-1 h-4 w-4" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="group">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-3xl font-bold tracking-tight">{pipeline.name}</h1>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={startEditing}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-muted-foreground">{pipeline.description || "No description"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Created {formatDate(pipeline.created_at)}
+                </p>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {versions.length > 0 && (
@@ -94,7 +188,7 @@ export default function PipelineDetailPage() {
                 onVersionSelect={setSelectedVersionId}
               />
             )}
-            <Button>
+            <Button onClick={() => setShowRerunModal(true)} disabled={!selectedVersionId}>
               <Play className="mr-2 h-4 w-4" />
               Run Again
             </Button>
@@ -190,6 +284,17 @@ export default function PipelineDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Rerun Modal */}
+      {selectedVersionId && (
+        <RerunModal
+          isOpen={showRerunModal}
+          onClose={() => setShowRerunModal(false)}
+          pipelineId={pipelineId}
+          pipelineVersionId={selectedVersionId}
+          pipelineName={pipeline.name}
+        />
+      )}
     </div>
   );
 }

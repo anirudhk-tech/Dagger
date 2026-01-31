@@ -5,8 +5,6 @@ import { pipelinesRoutes } from "./routes/pipelines";
 import { runsRoutes } from "./routes/runs";
 import { pipelineRunRoutes } from "./routes/pipeline-run";
 import { exportDockerRoutes } from "./routes/export-docker";
-import { downloadRoutes } from "./routes/download";
-import { startCleanupJob } from "./jobs/cleanup";
 import { loadWasmEngine, isWasmLoaded } from "../engine_wasm/bindings";
 
 // Try to load WASM engine (falls back to TypeScript if unavailable)
@@ -24,11 +22,7 @@ const app = new Elysia()
   .use(runsRoutes)
   .use(pipelineRunRoutes)
   .use(exportDockerRoutes)
-  .use(downloadRoutes)
   .listen(process.env.PORT || 3001);
-
-// Start the cleanup job for expired artifacts
-startCleanupJob();
 
 console.log(
   `🚀 PipeCanvas server running at http://${app.server?.hostname}:${app.server?.port}`

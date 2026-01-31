@@ -31,8 +31,10 @@ export default function RootLayout({
       >
         <div className="flex h-screen">
           <Sidebar />
-          <main className="flex-1 overflow-auto">
-            {children}
+          <main className="flex-1 overflow-auto bg-muted/30">
+            <div className="min-h-full">
+              {children}
+            </div>
           </main>
         </div>
         <Toaster />

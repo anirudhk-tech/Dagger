@@ -28,8 +28,16 @@ async function fetchAPI<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(error.message || `API error: ${response.status}`);
+    const errorBody = await response.text();
+    let errorMessage = `API error: ${response.status}`;
+    try {
+      const error = JSON.parse(errorBody);
+      errorMessage = error.message || error.error || errorBody;
+    } catch {
+      errorMessage = errorBody || response.statusText;
+    }
+    console.error(`API Error [${endpoint}]:`, errorMessage);
+    throw new Error(errorMessage);
   }
 
   return response.json();
@@ -144,6 +152,20 @@ export async function getPipeline(id: string): Promise<{ pipeline: Pipeline; ver
     console.error("Failed to fetch pipeline:", error);
     return null;
   }
+}
+
+// ============================================
+// Update Pipeline
+// ============================================
+
+export async function updatePipeline(
+  id: string,
+  updates: { name?: string; description?: string }
+): Promise<{ success: boolean }> {
+  return fetchAPI<{ success: boolean }>(`/pipelines/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
 }
 
 // ============================================
